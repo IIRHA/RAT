@@ -1,0 +1,8 @@
+C:/repos/RAT/vcpkg_installed/x86-windows/vcpkg/blds/fmt/x86-windows-dbg/CMakeFiles/fmt.dir
+C:/repos/RAT/vcpkg_installed/x86-windows/vcpkg/blds/fmt/x86-windows-dbg/CMakeFiles/package.dir
+C:/repos/RAT/vcpkg_installed/x86-windows/vcpkg/blds/fmt/x86-windows-dbg/CMakeFiles/package_source.dir
+C:/repos/RAT/vcpkg_installed/x86-windows/vcpkg/blds/fmt/x86-windows-dbg/CMakeFiles/edit_cache.dir
+C:/repos/RAT/vcpkg_installed/x86-windows/vcpkg/blds/fmt/x86-windows-dbg/CMakeFiles/rebuild_cache.dir
+C:/repos/RAT/vcpkg_installed/x86-windows/vcpkg/blds/fmt/x86-windows-dbg/CMakeFiles/list_install_components.dir
+C:/repos/RAT/vcpkg_installed/x86-windows/vcpkg/blds/fmt/x86-windows-dbg/CMakeFiles/install.dir
+C:/repos/RAT/vcpkg_installed/x86-windows/vcpkg/blds/fmt/x86-windows-dbg/CMakeFiles/install/local.dir
