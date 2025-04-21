@@ -361,3 +361,9 @@ MigrationBackup/
 
 # Fody - auto-generated XML schema
 FodyWeavers.xsd
+
+# VCPKG Folder
+vcpkg_installed/
+
+#.idea folder
+.idea/
