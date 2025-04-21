@@ -20,6 +20,8 @@
 #include <openssl/ssl.h>
 #include <openssl/applink.c>
 
+#include "base64.h"
+
 #pragma comment (lib, "Ws2_32.lib")
 
 #define SVPORT 8008
@@ -114,6 +116,8 @@ int decryptAES(unsigned char* ciphertext, int ciphertextLen, unsigned char* key,
 
     return plaintextLen;
 }
+
+
 
 // void ELEVATE()
 // {
